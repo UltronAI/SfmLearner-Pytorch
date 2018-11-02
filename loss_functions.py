@@ -77,6 +77,27 @@ def smooth_loss(pred_map):
     return loss
 
 
+def smooth_loss_disp(pred_map):
+    def gradient(pred):
+        D_dy = pred[:, 1:, :, :] - pred[:, :-1, :, :]
+        D_dx = pred[:, :, 1:, :] - pred[:, :, :-1, :]
+        return D_dx, D_dy
+
+    if type(pred_map) not in [tuple, list]:
+        pred_map = [pred_map]
+
+    loss = 0.
+    weight = 1.
+
+    for scaled_map in pred_map:
+        dx, dy = gradient(scaled_map)
+        dx2, dxdy = gradient(dx)
+        dydx, dy2 = gradient(dy)
+        loss += (dx2.abs().mean() + dxdy.abs().mean() + dydx.abs().mean() + dy2.abs().mean()) * weight
+        weight /= 2
+
+    return loss
+
 @torch.no_grad()
 def compute_errors(gt, pred, crop=True):
     abs_diff, abs_rel, sq_rel, a1, a2, a3 = 0,0,0,0,0,0

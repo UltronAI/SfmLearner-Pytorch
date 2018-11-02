@@ -58,6 +58,7 @@ def dump_example(scene, args):
 
 def main():
     args.dump_root = Path(args.dump_root)
+    print(args.dump_root)
     args.dump_root.mkdir_p()
 
     global data_loader
