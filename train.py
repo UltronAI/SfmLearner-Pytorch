@@ -1,6 +1,7 @@
 import argparse
 import time
 import csv
+import os
 
 import numpy as np
 import torch
@@ -76,6 +77,7 @@ best_error = -1
 n_iter = 0
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 def main():
     global best_error, n_iter, device
@@ -170,8 +172,8 @@ def main():
         disp_net.init_weights()
 
     cudnn.benchmark = True
-    disp_net = torch.nn.DataParallel(disp_net)
-    pose_exp_net = torch.nn.DataParallel(pose_exp_net)
+    # disp_net = torch.nn.DataParallel(disp_net)
+    # pose_exp_net = torch.nn.DataParallel(pose_exp_net)
 
     print('=> setting adam solver')
 
@@ -236,10 +238,10 @@ def main():
         save_checkpoint(
             args.save_path, {
                 'epoch': epoch + 1,
-                'state_dict': disp_net.module.state_dict()
+                'state_dict': disp_net.state_dict()
             }, {
                 'epoch': epoch + 1,
-                'state_dict': pose_exp_net.module.state_dict()
+                'state_dict': pose_exp_net.state_dict()
             },
             is_best)
 
