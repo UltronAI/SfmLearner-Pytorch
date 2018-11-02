@@ -27,7 +27,7 @@ parser.add_argument("--num-threads", type=int, default=4, help="number of thread
 args = parser.parse_args()
 
 
-def dump_example(scene):
+def dump_example(scene, args):
     scene_list = data_loader.collect_scenes(scene)
     for scene_data in scene_list:
         dump_dir = args.dump_root/scene_data['rel_path']
@@ -58,6 +58,7 @@ def dump_example(scene):
 
 def main():
     args.dump_root = Path(args.dump_root)
+    print(args.dump_root)
     args.dump_root.mkdir_p()
 
     global data_loader
@@ -83,7 +84,7 @@ def main():
         for scene in tqdm(data_loader.scenes):
             dump_example(scene)
     else:
-        Parallel(n_jobs=args.num_threads)(delayed(dump_example)(scene) for scene in tqdm(data_loader.scenes))
+        Parallel(n_jobs=args.num_threads)(delayed(dump_example)(scene, args) for scene in tqdm(data_loader.scenes))
 
     print('Generating train val lists')
     np.random.seed(8964)

@@ -15,7 +15,7 @@ import models
 from utils import tensor2array, save_checkpoint, save_path_formatter
 from inverse_warp import inverse_warp
 
-from loss_functions import photometric_reconstruction_loss, explainability_loss, smooth_loss, compute_errors
+from loss_functions import photometric_reconstruction_loss, explainability_loss, smooth_loss, compute_errors, smooth_loss_disp
 from logger import TermLogger, AverageMeter
 from tensorboardX import SummaryWriter
 
@@ -71,6 +71,7 @@ parser.add_argument('-s', '--smooth-loss-weight', type=float, help='weight for d
 parser.add_argument('--log-output', action='store_true', help='will log dispnet outputs and warped imgs at validation step')
 parser.add_argument('-f', '--training-output-freq', type=int, help='frequence for outputting dispnet outputs and warped imgs at training for all scales if 0 will not output',
                     metavar='N', default=0)
+parser.add_argument('--use-disp', action='store_true', help='use disparity to compute smooth loss.')
 
 best_error = -1
 n_iter = 0
@@ -149,6 +150,7 @@ def main():
     # create model
     print("=> creating model")
 
+    # the network for single-view depth prediction
     disp_net = models.DispNetS().to(device)
     output_exp = args.mask_loss_weight > 0
     if not output_exp:
@@ -284,7 +286,11 @@ def train(args, train_loader, disp_net, pose_exp_net, optimizer, epoch_size, log
             loss_2 = explainability_loss(explainability_mask)
         else:
             loss_2 = 0
-        loss_3 = smooth_loss(depth)
+
+        if args.use_disp:
+            loss_3 = smooth_loss_disp(disparities)
+        else:
+            loss_3 = smooth_loss(depth)
 
         loss = w1*loss_1 + w2*loss_2 + w3*loss_3
 
@@ -394,7 +400,11 @@ def validate_without_gt(args, val_loader, disp_net, pose_exp_net, epoch, logger,
             loss_2 = explainability_loss(explainability_mask).item()
         else:
             loss_2 = 0
-        loss_3 = smooth_loss(depth).item()
+
+        if args.use_disp:
+            loss_3 = smooth_loss_disp(disp).item()
+        else:
+            loss_3 = smooth_loss(depth).item()
 
         if log_outputs and i < len(output_writers):  # log first output of every 100 batch
             if epoch == 0:
