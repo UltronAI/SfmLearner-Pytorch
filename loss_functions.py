@@ -79,7 +79,7 @@ def smooth_loss(pred_map):
 
 def smooth_loss_disp(pred_map):
     def gradient(pred):
-        D_dy = pred[:, 1:, :, :] - pred[:, :-1, :, :]
+        D_dy = pred[:, :, :, 1:] - pred[:, :, :, :-1]
         D_dx = pred[:, :, 1:, :] - pred[:, :, :-1, :]
         return D_dx, D_dy
 
