@@ -70,15 +70,15 @@ parser.add_argument('-p', '--photo-loss-weight', type=float, help='weight for ph
 parser.add_argument('-m', '--mask-loss-weight', type=float, help='weight for explainabilty mask loss', metavar='W', default=0)
 parser.add_argument('-s', '--smooth-loss-weight', type=float, help='weight for disparity smoothness loss', metavar='W', default=0.1)
 parser.add_argument('--log-output', action='store_true', help='will log dispnet outputs and warped imgs at validation step')
-parser.add_argument('-f', '--training-output-freq', type=int, help='frequence for outputting dispnet outputs and warped imgs at training for all scales if 0 will not output',
-                    metavar='N', default=0)
+parser.add_argument('-f', '--training-output-freq', type=int, help='frequence for outputting dispnet outputs and warped imgs at training for all scales if 0 will not output', metavar='N', default=0)
+parser.add_argument('--smooth-loss-factor', type=float, help='scale factor used to compute smooth loss', metavar='W', default=2)
 parser.add_argument('--use-disp', action='store_true', help='use disparity to compute smooth loss.')
+parser.add_argument('-g', '--gpu-id', type=int, metavar='N', default=-1)
 
 best_error = -1
 n_iter = 0
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 def main():
     global best_error, n_iter, device
@@ -94,6 +94,10 @@ def main():
     torch.manual_seed(args.seed)
     if args.evaluate:
         args.epochs = 0
+    if args.gpu_id == 0 or args.gpu_id == 1:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+    else:
+        args.gpu_id = -1
 
     training_writer = SummaryWriter(args.save_path)
     output_writers = []
@@ -174,8 +178,9 @@ def main():
         disp_net.init_weights()
 
     cudnn.benchmark = True
-    # disp_net = torch.nn.DataParallel(disp_net)
-    # pose_exp_net = torch.nn.DataParallel(pose_exp_net)
+    if args.gpu_id < 0:
+        disp_net = torch.nn.DataParallel(disp_net)
+        pose_exp_net = torch.nn.DataParallel(pose_exp_net)
 
     print('=> setting adam solver')
 
@@ -237,15 +242,26 @@ def main():
         # remember lowest error and save checkpoint
         is_best = decisive_error < best_error
         best_error = min(best_error, decisive_error)
-        save_checkpoint(
-            args.save_path, {
-                'epoch': epoch + 1,
-                'state_dict': disp_net.state_dict()
-            }, {
-                'epoch': epoch + 1,
-                'state_dict': pose_exp_net.state_dict()
-            },
-            is_best)
+        if args.gpu_id < 0:
+            save_checkpoint(
+                args.save_path, {
+                    'epoch': epoch + 1,
+                    'state_dict': disp_net.module.state_dict()
+                }, {
+                    'epoch': epoch + 1,
+                    'state_dict': pose_exp_net.module.state_dict()
+                },
+                is_best)
+        else:
+            save_checkpoint(
+                args.save_path, {
+                    'epoch': epoch + 1,
+                    'state_dict': disp_net.state_dict()
+                }, {
+                    'epoch': epoch + 1,
+                    'state_dict': pose_exp_net.state_dict()
+                },
+                is_best)
 
         with open(args.save_path/args.log_summary, 'a') as csvfile:
             writer = csv.writer(csvfile, delimiter='\t')
@@ -259,6 +275,7 @@ def train(args, train_loader, disp_net, pose_exp_net, optimizer, epoch_size, log
     data_time = AverageMeter()
     losses = AverageMeter(precision=4)
     w1, w2, w3 = args.photo_loss_weight, args.mask_loss_weight, args.smooth_loss_weight
+    scale_factor = args.smooth_loss_factor
 
     # switch to train mode
     disp_net.train()
@@ -290,9 +307,9 @@ def train(args, train_loader, disp_net, pose_exp_net, optimizer, epoch_size, log
             loss_2 = 0
 
         if args.use_disp:
-            loss_3 = smooth_loss_disp(disparities)
+            loss_3 = smooth_loss_disp(disparities, scale_factor)
         else:
-            loss_3 = smooth_loss(depth)
+            loss_3 = smooth_loss(depth, scale_factor)
 
         loss = w1*loss_1 + w2*loss_2 + w3*loss_3
 
@@ -373,6 +390,7 @@ def validate_without_gt(args, val_loader, disp_net, pose_exp_net, epoch, logger,
     losses = AverageMeter(i=3, precision=4)
     log_outputs = len(output_writers) > 0
     w1, w2, w3 = args.photo_loss_weight, args.mask_loss_weight, args.smooth_loss_weight
+    scale_factor = args.smooth_loss_factor
     poses = np.zeros(((len(val_loader)-1) * args.batch_size * (args.sequence_length-1),6))
     disp_values = np.zeros(((len(val_loader)-1) * args.batch_size * 3))
 
@@ -404,9 +422,9 @@ def validate_without_gt(args, val_loader, disp_net, pose_exp_net, epoch, logger,
             loss_2 = 0
 
         if args.use_disp:
-            loss_3 = smooth_loss_disp(disp).item()
+            loss_3 = smooth_loss_disp(disp, scale_factor).item()
         else:
-            loss_3 = smooth_loss(depth).item()
+            loss_3 = smooth_loss(depth, scale_factor).item()
 
         if log_outputs and i < len(output_writers):  # log first output of every 100 batch
             if epoch == 0:

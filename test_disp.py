@@ -6,7 +6,7 @@ import numpy as np
 from path import Path
 import argparse
 from tqdm import tqdm
-
+from os.path import join
 from models import DispNetS, PoseExpNet
 
 
@@ -19,7 +19,7 @@ parser.add_argument("--img-width", default=416, type=int, help="Image width")
 parser.add_argument("--no-resize", action='store_true', help="no resizing is done")
 parser.add_argument("--min-depth", default=1e-3)
 parser.add_argument("--max-depth", default=80)
-
+parser.add_argument("--log-dir", default='.', type=str)
 parser.add_argument("--dataset-dir", default='.', type=str, help="Dataset directory")
 parser.add_argument("--dataset-list", default=None, type=str, help="Dataset list file")
 parser.add_argument("--output-dir", default=None, type=str, help="Output directory for saving predictions in a big 3D numpy file")
@@ -67,6 +67,11 @@ def main():
     if args.output_dir is not None:
         output_dir = Path(args.output_dir)
         output_dir.makedirs_p()
+    if args.log_dir is not None:
+        log_dir = Path(args.log_dir)
+        result_log = open(join(log_dir, 'results.txt'), 'w')
+        result_log.write("pretrained-dispnet: {} \n".format(args.pretrained_dispnet))
+        result_log.write("pretrained-posenet: {} \n".format(args.pretrained_posenet))
 
     for j, sample in enumerate(tqdm(framework)):
         tgt_img = sample['tgt']
@@ -128,10 +133,19 @@ def main():
         print("Results with scale factor determined by PoseNet : ")
         print("{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}".format(*error_names))
         print("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}".format(*mean_errors[0]))
+        if args.log_dir is not None:
+            result_log.write("Results with scale factor determined by PoseNet : \n")
+            result_log.write("{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10} \n".format(*error_names))
+            result_log.write("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f} \n".format(*mean_errors[0]))
 
-    print("Results with scale factor determined by GT/prediction ratio (like the original paper) : ")
+    print("Results with scale factor determined by GT/prediction ratio (like the original paper) :")
     print("{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}".format(*error_names))
     print("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}".format(*mean_errors[1]))
+    if args.log_dir is not None:
+        result_log.write("Results with scale factor determined by GT/prediction ratio (like the original paper) : \n")
+        result_log.write("{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10} \n".format(*error_names))
+        result_log.write("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f} \n".format(*mean_errors[1]))
+        result_log.close()
 
     if args.output_dir is not None:
         np.save(output_dir/'predictions.npy', predictions)

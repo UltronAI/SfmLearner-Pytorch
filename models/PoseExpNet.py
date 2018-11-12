@@ -79,10 +79,10 @@ class PoseExpNet(nn.Module):
             out_upconv2 = self.upconv2(out_upconv3)[:, :, 0:out_conv1.size(2), 0:out_conv1.size(3)]
             out_upconv1 = self.upconv1(out_upconv2)[:, :, 0:input.size(2), 0:input.size(3)]
 
-            exp_mask4 = nn.functional.sigmoid(self.predict_mask4(out_upconv4))
-            exp_mask3 = nn.functional.sigmoid(self.predict_mask3(out_upconv3))
-            exp_mask2 = nn.functional.sigmoid(self.predict_mask2(out_upconv2))
-            exp_mask1 = nn.functional.sigmoid(self.predict_mask1(out_upconv1))
+            exp_mask4 = torch.sigmoid(self.predict_mask4(out_upconv4))
+            exp_mask3 = torch.sigmoid(self.predict_mask3(out_upconv3))
+            exp_mask2 = torch.sigmoid(self.predict_mask2(out_upconv2))
+            exp_mask1 = torch.sigmoid(self.predict_mask1(out_upconv1))
         else:
             exp_mask4 = None
             exp_mask3 = None

@@ -26,6 +26,7 @@ def save_path_formatter(args, parser):
     keys_with_prefix['mask_loss_weight'] = 'm'
     keys_with_prefix['smooth_loss_weight'] = 's'
     keys_with_prefix['use_disp'] = 'use_disp_'
+    keys_with_prefix['smooth_loss_factor'] = 'scale_factor_'
 
     for key, prefix in keys_with_prefix.items():
         value = args_dict[key]

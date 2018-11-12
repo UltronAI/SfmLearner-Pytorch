@@ -56,7 +56,7 @@ def explainability_loss(mask):
     return loss
 
 
-def smooth_loss(pred_map):
+def smooth_loss(pred_map, scale_factor):
     def gradient(pred):
         D_dy = pred[:, :, 1:] - pred[:, :, :-1]
         D_dx = pred[:, :, :, 1:] - pred[:, :, :, :-1]
@@ -73,11 +73,11 @@ def smooth_loss(pred_map):
         dx2, dxdy = gradient(dx)
         dydx, dy2 = gradient(dy)
         loss += (dx2.abs().mean() + dxdy.abs().mean() + dydx.abs().mean() + dy2.abs().mean())*weight
-        weight /= 2 # 2.3  # don't ask me why it works better
+        weight /= scale_factor  # don't ask me why it works better
     return loss
 
 
-def smooth_loss_disp(pred_map):
+def smooth_loss_disp(pred_map, scale_factor):
     def gradient(pred):
         D_dy = pred[:, :, :, 1:] - pred[:, :, :, :-1]
         D_dx = pred[:, :, 1:, :] - pred[:, :, :-1, :]
@@ -94,7 +94,7 @@ def smooth_loss_disp(pred_map):
         dx2, dxdy = gradient(dx)
         dydx, dy2 = gradient(dy)
         loss += (dx2.abs().mean() + dxdy.abs().mean() + dydx.abs().mean() + dy2.abs().mean()) * weight
-        weight /= 2
+        weight /= scale_factor
 
     return loss
 
