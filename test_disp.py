@@ -69,7 +69,7 @@ def main():
         output_dir.makedirs_p()
     if args.log_dir is not None:
         log_dir = Path(args.log_dir)
-        result_log = open(join(log_dir, 'results.txt'), 'w')
+        result_log = open(join(log_dir, 'results.txt'), 'a')
         result_log.write("pretrained-dispnet: {} \n".format(args.pretrained_dispnet))
         result_log.write("pretrained-posenet: {} \n".format(args.pretrained_posenet))
 
@@ -144,7 +144,7 @@ def main():
     if args.log_dir is not None:
         result_log.write("Results with scale factor determined by GT/prediction ratio (like the original paper) : \n")
         result_log.write("{:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10}, {:>10} \n".format(*error_names))
-        result_log.write("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f} \n".format(*mean_errors[1]))
+        result_log.write("{:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f}, {:10.4f} \n\n".format(*mean_errors[1]))
         result_log.close()
 
     if args.output_dir is not None:
