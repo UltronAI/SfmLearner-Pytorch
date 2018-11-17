@@ -141,8 +141,8 @@ class QuantPoseExpNet(nn.Module):
         input = [target_image]
         input.extend(ref_imgs)
         input = torch.cat(input, 1)
-        out_conv1 = self.conv1(input)
-        out_conv2 = self.conv2(out_conv1)
+        out_conv1 = self.conv1_2(self.conv1_1(input))
+        out_conv2 = self.conv2_2(self.conv2_1(out_conv1))
         out_conv3 = self.conv3(out_conv2)
         out_conv4 = self.conv4(out_conv3)
         out_conv5 = self.conv5(out_conv4)
