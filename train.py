@@ -75,9 +75,9 @@ parser.add_argument('--smooth-loss-factor', type=float, help='scale factor used 
 parser.add_argument('--use-disp', action='store_true', help='use disparity to compute smooth loss.')
 parser.add_argument('-g', '--gpu-id', type=int, metavar='N', default=-1)
 parser.add_argument('--use-quant-model', action='store_true', help='use models designed for quantization')
-parser.add_argument('--copy-pretrained-disp', dest='pretrained_disp', default=None, metavar='PATH',
+parser.add_argument('--copy-pretrained-disp', dest='copy_pretrained_disp', default=None, metavar='PATH',
                     help='path to pre-trained dispnet model')
-parser.add_argument('--copy-pretrained-exppose', dest='pretrained_exp_pose', default=None, metavar='PATH',
+parser.add_argument('--copy-pretrained-exppose', dest='copy_pretrained_exp_pose', default=None, metavar='PATH',
                     help='path to pre-trained Exp Pose net model')
 
 best_error = -1
