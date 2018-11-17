@@ -74,6 +74,11 @@ parser.add_argument('-f', '--training-output-freq', type=int, help='frequence fo
 parser.add_argument('--smooth-loss-factor', type=float, help='scale factor used to compute smooth loss', metavar='W', default=2)
 parser.add_argument('--use-disp', action='store_true', help='use disparity to compute smooth loss.')
 parser.add_argument('-g', '--gpu-id', type=int, metavar='N', default=-1)
+parser.add_argument('--use-quant-model', action='store_true', help='use models designed for quantization')
+parser.add_argument('--copy-pretrained-disp', dest='pretrained_disp', default=None, metavar='PATH',
+                    help='path to pre-trained dispnet model')
+parser.add_argument('--copy-pretrained-exppose', dest='pretrained_exp_pose', default=None, metavar='PATH',
+                    help='path to pre-trained Exp Pose net model')
 
 best_error = -1
 n_iter = 0
@@ -157,11 +162,21 @@ def main():
     print("=> creating model")
 
     # the network for single-view depth prediction
-    disp_net = models.DispNetS().to(device)
+    # disp_net = models.DispNetS().to(device)
     output_exp = args.mask_loss_weight > 0
     if not output_exp:
         print("=> no mask loss, PoseExpnet will only output pose")
-    pose_exp_net = models.PoseExpNet(nb_ref_imgs=args.sequence_length - 1, output_exp=args.mask_loss_weight > 0).to(device)
+    if args.use_quant_model:
+        disp_net = models.QuantDispNetS().to(device)
+        pose_exp_net = models.QuantPoseExpNet(nb_ref_imgs=args.sequence_length - 1, output_exp=args.mask_loss_weight > 0).to(device)
+    else:
+        disp_net = models.DispNetS().to(device)
+        pose_exp_net = models.PoseExpNet(nb_ref_imgs=args.sequence_length - 1, output_exp=args.mask_loss_weight > 0).to(device)
+
+    if args.copy_pretrained_exp_pose:
+        print("=> copy pre-trained weights for explainabilty and pose net")
+        weights = torch.load(args.pretrained_exp_pose)
+        pose_exp_net.copy_params_from_pretrained(weights['state_dict'])
 
     if args.pretrained_exp_pose:
         print("=> using pre-trained weights for explainabilty and pose net")
@@ -169,6 +184,11 @@ def main():
         pose_exp_net.load_state_dict(weights['state_dict'], strict=False)
     else:
         pose_exp_net.init_weights()
+
+    if args.copy_pretrained_disp:
+        print("=> copy pre-trained weights for Dispnet")
+        weights = torch.load(args.pretrained_disp)
+        disp_net.copy_params_from_pretrained(weights['state_dict'])
 
     if args.pretrained_disp:
         print("=> using pre-trained weights for Dispnet")
