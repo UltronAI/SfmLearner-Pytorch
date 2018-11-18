@@ -7,7 +7,7 @@ from path import Path
 import argparse
 from tqdm import tqdm
 from os.path import join
-from models import DispNetS, PoseExpNet
+from models import DispNetS, PoseExpNet, QuantDispNetS, QuantPoseExpNet
 
 
 parser = argparse.ArgumentParser(description='Script for DispNet testing with corresponding groundTruth',
@@ -17,6 +17,7 @@ parser.add_argument("--pretrained-posenet", default=None, type=str, help="pretra
 parser.add_argument("--img-height", default=128, type=int, help="Image height")
 parser.add_argument("--img-width", default=416, type=int, help="Image width")
 parser.add_argument("--no-resize", action='store_true', help="no resizing is done")
+parser.add_argument("--use-quant-model", action='store_true')
 parser.add_argument("--min-depth", default=1e-3)
 parser.add_argument("--max-depth", default=80)
 parser.add_argument("--log-dir", default='.', type=str)
@@ -38,7 +39,10 @@ def main():
     elif args.gt_type == 'stillbox':
         from stillbox_eval.depth_evaluation_utils import test_framework_stillbox as test_framework
 
-    disp_net = DispNetS().to(device)
+    if args.use_quant_model:
+        disp_net = QuantDispNetS().to(device)
+    else:
+        disp_net = DispNetS().to(device)
     weights = torch.load(args.pretrained_dispnet)
     disp_net.load_state_dict(weights['state_dict'])
     disp_net.eval()
@@ -50,7 +54,10 @@ def main():
     else:
         weights = torch.load(args.pretrained_posenet)
         seq_length = int(weights['state_dict']['conv1.0.weight'].size(1)/3)
-        pose_net = PoseExpNet(nb_ref_imgs=seq_length - 1, output_exp=False).to(device)
+        if args.use_quant_model:
+            pose_net = QuantPoseExpNet(nb_ref_imgs=seq_length - 1, output_exp=False).to(device)
+        else:
+            pose_net = PoseExpNet(nb_ref_imgs=seq_length - 1, output_exp=False).to(device)
         pose_net.load_state_dict(weights['state_dict'], strict=False)
 
     dataset_dir = Path(args.dataset_dir)
