@@ -143,8 +143,6 @@ class QuantDispNetS(nn.Module):
         self.beta = beta
 
         conv_planes = [32, 64, 128, 256, 512, 512, 512]
-        # self.conv1 = downsample_conv(3,              conv_planes[0], kernel_size=7)
-        # self.conv2 = downsample_conv(conv_planes[0], conv_planes[1], kernel_size=5)
         self.conv1_1 = nn.Conv2d(3, conv_planes[0], kernel_size=1, stride=1, padding=0)
         self.conv1_2 = downsample_conv(conv_planes[0], conv_planes[0])
         self.conv2_1 = nn.Conv2d(conv_planes[0], conv_planes[1], kernel_size=1, stride=1, padding=0)

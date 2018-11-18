@@ -77,3 +77,43 @@ def save_checkpoint(save_path, dispnet_state, exp_pose_state, is_best, filename=
     if is_best:
         for prefix in file_prefixes:
             shutil.copyfile(save_path/'{}_{}'.format(prefix,filename), save_path/'{}_model_best.pth.tar'.format(prefix))
+
+
+def quantize(_arr):
+    """
+    input: numpy array
+    output: 8-bit quantized numpy array
+    """
+    assert type(_arr) is np.ndarray, 'you need convert torch to np.ndarray'
+
+    arr = np.copy(_arr)
+    arr_max, arr_min = np.max(arr), np.min(arr)
+    scale = max(
+                floor(log2(abs(arr_max if arr_max > 0 else arr_max + 1))) + 1,
+                floor(log2(abs(arr_min if arr_min > 0 else arr_min + 1))) + 1,
+                floor(log2(127)) + 1
+                )
+    scale = log2(2 ** 7 / 2 ** scale)
+    quant_num = np.arange(-128 * 2 ** (-scale), 128 * 2 ** (-scale), 2 ** (-scale))
+    for ele in np.nditer(arr, op_flags=['readwrite']):
+        ele[...] =  int(min(quant_num, key=lambda x: abs(x - ele)))
+
+    return arr, scale
+
+def quantizeWeight(state_dict, fix_info):
+    new_state_dict = {}
+    for key, value in state_dict.items():
+        cur_value = value.cpu().numpy().copy()
+        quant_value, scale = quantize(cur_value)
+        fix_key = '_'.join(key.split('.')[:-1])
+        fix_info[fix_key][key.split('.')[-1]] = scale
+        new_state_dict[key] = quant_value.from_numpy(quant_value, dtype=torch.int).to(device)
+
+    return new_state_dict
+
+def quantHook(module, input, output):
+    print(module)
+    for val in input:
+        print("input:",val)
+    for out_val in output:
+        print("output:", out_val)
