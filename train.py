@@ -177,8 +177,7 @@ def main():
         print("=> copy pre-trained weights for explainabilty and pose net")
         weights = torch.load(args.pretrained_exp_pose)
         pose_exp_net.copy_params_from_pretrained(weights['state_dict'])
-
-    if args.pretrained_exp_pose:
+    elif args.pretrained_exp_pose:
         print("=> using pre-trained weights for explainabilty and pose net")
         weights = torch.load(args.pretrained_exp_pose)
         pose_exp_net.load_state_dict(weights['state_dict'], strict=False)
@@ -189,8 +188,7 @@ def main():
         print("=> copy pre-trained weights for Dispnet")
         weights = torch.load(args.pretrained_disp)
         disp_net.copy_params_from_pretrained(weights['state_dict'])
-
-    if args.pretrained_disp:
+    elif args.pretrained_disp:
         print("=> using pre-trained weights for Dispnet")
         weights = torch.load(args.pretrained_disp)
         disp_net.load_state_dict(weights['state_dict'])
