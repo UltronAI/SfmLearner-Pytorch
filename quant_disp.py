@@ -107,7 +107,7 @@ def main():
         count = 0
         for key, value in fix_info.items():
             f.write('{count} {layer} 8 {input} 8 {output} 8 {weight} 8 {bias} \n'.format(
-                    count=count, layer=key, input=value['input'], output=value['output'], weight=value['weight'], bias=value['bias']))
+                    count=count, layer=key, input=int(value['input']), output=int(value['output']), weight=int(value['weight']), bias=int(value['bias'])))
             count += 1
 
 if __name__ == '__main__':

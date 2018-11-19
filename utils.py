@@ -100,7 +100,7 @@ def quantize(_arr):
     scale = getScale(arr)
     quant_num = np.arange(-128 * 2 ** (-scale), 128 * 2 ** (-scale), 2 ** (-scale))
     for ele in np.nditer(arr, op_flags=['readwrite']):
-        ele[...] =  int(min(quant_num, key=lambda x: abs(x - ele)))
+        ele[...] =  min(quant_num, key=lambda x: abs(x - ele))
 
     return arr, scale
 

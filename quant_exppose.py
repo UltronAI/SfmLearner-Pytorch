@@ -49,7 +49,7 @@ def main():
 
     weights = torch.load(args.pretrained_posenet)
     seq_length = int(weights['state_dict']['conv1_1.weight'].size(1)/3)
-    pose_net = QuantPoseExpNet(nb_ref_imgs=seq_length - 1, output_exp=False).to(device)
+    pose_net = QuantPoseExpNet(nb_ref_imgs=seq_length - 1, output_exp=True).to(device)
     pose_net.load_state_dict(weights['state_dict'], strict=False)
 
     print("Quantizing the pretrained model ...")
@@ -67,6 +67,8 @@ def main():
         torch.save(quant_weights, output_dir/'quant_expposenet_model.pth.tar')
     else:
         print('output dir is required, or quantized model would not be saved.')
+
+    pose_net.eval()
 
     for j, sample in enumerate(tqdm(framework)):
         imgs = sample['imgs']
@@ -130,10 +132,14 @@ def main():
     with open(output_dir/'expposenet_fix_info.txt', 'w') as f:
         count = 0
         for key, value in fix_info.items():
-            f.write('{count} {layer} 8 {input} 8 {output} 8 {weight} 8 {bias} \n'.format(
-                    count=count, layer=key, input=value['input'], output=value['output'], weight=value['weight'], bias=value['bias']))
-            count += 1
-
+            try:
+                f.write("{count} {layer} 8 {input} 8 {output} 8 {weight} 8 {bias} \n".format(
+                    count=count, layer=key, input=int(value['input']), output=int(value['output']), weight=int(value['weight']), bias=int(value['bias'])))
+                count += 1
+            except:
+                print('*** error ***')
+                print("key: {key}, value: {value}".format(key=key, value=value))
+                continue
 
 def compute_pose_error(gt, pred):
     RE = 0
