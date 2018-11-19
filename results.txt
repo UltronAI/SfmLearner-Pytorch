@@ -19,3 +19,9 @@ Results with scale factor determined by GT/prediction ratio (like the original p
    abs_rel,     sq_rel,        rms,    log_rms,         a1,         a2,         a3 
     0.1917,     1.6943,     6.2684,     0.2741,     0.7297,     0.9047,     0.9589 
 
+pretrained-dispnet: checkpoints/cs+k,epoch_size3000,m0.2,s0.5,scale_factor_2.3,use_quant_model_True/11-17-02:57/dispnet_model_best.pth.tar 
+pretrained-posenet: None 
+Results with scale factor determined by GT/prediction ratio (like the original paper) : 
+   abs_rel,     sq_rel,        rms,    log_rms,         a1,         a2,         a3 
+    0.1900,     1.4113,     6.1947,     0.2644,     0.7181,     0.9049,     0.9633 
+

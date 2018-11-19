@@ -5,7 +5,9 @@ import torch
 from path import Path
 import datetime
 from collections import OrderedDict
+from math import floor, log2
 
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 def save_path_formatter(args, parser):
     def is_default(key, value):
@@ -77,6 +79,16 @@ def save_checkpoint(save_path, dispnet_state, exp_pose_state, is_best, filename=
         for prefix in file_prefixes:
             shutil.copyfile(save_path/'{}_{}'.format(prefix,filename), save_path/'{}_model_best.pth.tar'.format(prefix))
 
+def getScale(_arr):
+    arr = np.copy(_arr)
+    arr_max, arr_min = np.max(arr), np.min(arr)
+    scale = max(
+                floor(log2(abs(arr_max if arr_max > 0 else arr_max + 1))) + 1,
+                floor(log2(abs(arr_min if arr_min > 0 else arr_min + 1))) + 1,
+                floor(log2(127)) + 1
+                )
+    scale = log2(2 ** 7 / 2 ** scale)
+    return scale
 
 def quantize(_arr):
     """
@@ -86,13 +98,7 @@ def quantize(_arr):
     assert type(_arr) is np.ndarray, 'you need convert torch to np.ndarray'
 
     arr = np.copy(_arr)
-    arr_max, arr_min = np.max(arr), np.min(arr)
-    scale = max(
-                floor(log2(abs(arr_max if arr_max > 0 else arr_max + 1))) + 1,
-                floor(log2(abs(arr_min if arr_min > 0 else arr_min + 1))) + 1,
-                floor(log2(127)) + 1
-                )
-    scale = log2(2 ** 7 / 2 ** scale)
+    scale = getScale(arr)
     quant_num = np.arange(-128 * 2 ** (-scale), 128 * 2 ** (-scale), 2 ** (-scale))
     for ele in np.nditer(arr, op_flags=['readwrite']):
         ele[...] =  int(min(quant_num, key=lambda x: abs(x - ele)))
@@ -104,15 +110,13 @@ def quantizeWeight(state_dict, fix_info):
     for key, value in state_dict.items():
         cur_value = value.cpu().numpy().copy()
         quant_value, scale = quantize(cur_value)
-        fix_key = '_'.join(key.split('.')[:-1])
-        fix_info[fix_key][key.split('.')[-1]] = scale
-        new_state_dict[key] = quant_value.from_numpy(quant_value, dtype=torch.int).to(device)
+        fix_key = '.'.join(key.split('.')[:-1])
+        if fix_key in fix_info.keys():
+            fix_info[fix_key][key.split('.')[-1]] = scale
+        else:
+            fix_info[fix_key] = {}
+            fix_info[fix_key][key.split('.')[-1]] = scale
+        new_state_dict[key] = torch.from_numpy(quant_value).to(device)
 
     return new_state_dict
 
-def quantHook(module, input, output):
-    print(module)
-    for val in input:
-        print("input:",val)
-    for out_val in output:
-        print("output:", out_val)

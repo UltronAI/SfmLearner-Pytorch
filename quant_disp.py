@@ -1,15 +1,14 @@
 import torch
 
 from imageio import imread, imsave
-from scipy import imresize
+from scipy.misc import imresize
 import numpy as np
 from path import Path
 import argparse
 from tqdm import tqdm
-from math import log2, floor
 
 from models import QuantDispNetS
-from utils import tensor2array, quantize, quantizeWeight, quantHook
+from utils import tensor2array, getScale, quantize, quantizeWeight
 
 parser = argparse.ArgumentParser(description='Quantize Pretrained DispNet',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -25,17 +24,30 @@ parser.add_argument("--dataset-dir", default='.', type=str, help="Dataset direct
 parser.add_argument("--output-dir", default='output', type=str, help="Output directory")
 
 parser.add_argument("--img-exts", default=['png', 'jpg', 'bmp'], nargs='*', type=str, help="images extensions to glob")
+parser.add_argument("--quantize-weights", action='store_true')
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 fix_info = {}
+
+def quantHookWithName(module_name):
+    def quantHook(module, input, output):
+        if 'input' not in fix_info[module_name].keys():
+            fix_info[module_name]['input'] = getScale(input[0].cpu().numpy().copy())
+        else:
+            fix_info[module_name]['input'] = min(fix_info[module_name]['input'], getScale(input[0].cpu().numpy().copy()))
+        if 'output' not in fix_info[module_name].keys():
+            fix_info[module_name]['output'] = getScale(output[0].cpu().numpy().copy())
+        else:
+            fix_info[module_name]['output'] = min(fix_info[module_name]['output'], getScale(output[0].cpu().numpy().copy()))
+    return quantHook
 
 @torch.no_grad()
 def main():
     args = parser.parse_args()
     if not(args.output_disp or args.output_depth):
         print('You must at least output one value !')
-        return
+        # return
 
     disp_net = QuantDispNetS().to(device)
     weights = torch.load(args.pretrained)
@@ -46,8 +58,13 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.makedirs_p()
 
-    quant_weights = { 'state_dict': quantizeWeight(weights['state_dict'], fix_info) }
-    torch.save(quant_weights, output_dir/'quant_dispnet_model.pth.tar')
+    if args.quantize_weights:
+        print("Quantizing the pretrained model ...")
+        quant_weights = { 'state_dict': quantizeWeight(weights['state_dict'], fix_info) }
+        torch.save(quant_weights, output_dir/'quant_dispnet_model.pth.tar')
+    else:
+        for key in weights['state_dict'].keys():
+            fix_info['.'.join(key.split('.')[:-1])] = {}
 
     if args.dataset_list is not None:
         with open(args.dataset_list, 'r') as f:
@@ -69,9 +86,14 @@ def main():
         tensor_img = torch.from_numpy(img).unsqueeze(0)
         tensor_img = ((tensor_img/255 - 0.5)/0.2).to(device)
 
-        handle = disp_net.register_forward_hook(quantHook)
-        output = disp_net(img)[0]
-        handle.remove()
+        handles = []
+        for name, module in disp_net.named_modules():
+            if name in fix_info.keys():
+                handle = module.register_forward_hook(quantHookWithName(name))
+                handles.append(handle)
+        output = disp_net(tensor_img)[0]
+        for handle in handles:
+            handle.remove()
 
         if args.output_disp:
             disp = (255*tensor2array(output, max_value=None, colormap='bone')).astype(np.uint8)
@@ -80,6 +102,13 @@ def main():
             depth = 1/output
             depth = (255*tensor2array(depth, max_value=10, colormap='rainbow')).astype(np.uint8)
             imsave(output_dir/'{}_depth{}'.format(file.namebase,file.ext), depth)
+    
+    with open(output_dir/'fix_info.txt', 'w') as f:
+        count = 0
+        for key, value in fix_info.items():
+            f.write('{count} {layer} 8 {input} 8 {output} 8 {weight} 8 {bias} \n'.format(
+                    count=count, layer=key, input=value['input'], output=value['output'], weight=value['weight'], bias=value['bias']))
+            count += 1
 
 if __name__ == '__main__':
     main()
