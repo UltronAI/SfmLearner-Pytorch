@@ -84,8 +84,7 @@ def getScale(_arr):
     arr_max, arr_min = np.max(arr), np.min(arr)
     scale = max(
                 floor(log2(abs(arr_max if arr_max > 0 else arr_max + 1))) + 1,
-                floor(log2(abs(arr_min if arr_min > 0 else arr_min + 1))) + 1,
-                floor(log2(127)) + 1
+                floor(log2(abs(arr_min if arr_min > 0 else arr_min + 1))) + 1
                 )
     scale = log2(2 ** 7 / 2 ** scale)
     return scale
