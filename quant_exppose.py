@@ -48,7 +48,7 @@ def main():
     from kitti_eval.pose_evaluation_utils import test_framework_KITTI as test_framework
 
     weights = torch.load(args.pretrained_posenet)
-    seq_length = int(weights['state_dict']['conv1.0.weight'].size(1)/3)
+    seq_length = int(weights['state_dict']['conv1_1.weight'].size(1)/3)
     pose_net = QuantPoseExpNet(nb_ref_imgs=seq_length - 1, output_exp=False).to(device)
     pose_net.load_state_dict(weights['state_dict'], strict=False)
 
