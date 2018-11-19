@@ -103,7 +103,7 @@ def main():
             depth = (255*tensor2array(depth, max_value=10, colormap='rainbow')).astype(np.uint8)
             imsave(output_dir/'{}_depth{}'.format(file.namebase,file.ext), depth)
     
-    with open(output_dir/'fix_info.txt', 'w') as f:
+    with open(output_dir/'dispnet_fix_info.txt', 'w') as f:
         count = 0
         for key, value in fix_info.items():
             f.write('{count} {layer} 8 {input} 8 {output} 8 {weight} 8 {bias} \n'.format(
