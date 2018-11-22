@@ -25,6 +25,7 @@ parser.add_argument("--output-dir", default='output', type=str, help="Output dir
 
 parser.add_argument("--img-exts", default=['png', 'jpg', 'bmp'], nargs='*', type=str, help="images extensions to glob")
 parser.add_argument("--quantize-weights", action='store_true')
+parser.add_argument("--original-input", action='store_true')
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -84,7 +85,10 @@ def main():
         img = np.transpose(img, (2, 0, 1))
 
         tensor_img = torch.from_numpy(img).unsqueeze(0)
-        tensor_img = ((tensor_img/255 - 0.5)/0.2).to(device)
+        if args.original_input:
+            tensor_img = (tensor_img).to(device)
+        else:
+            tensor_img = ((tensor_img/255 - 0.5)/0.2).to(device)
 
         handles = []
         for name, module in disp_net.named_modules():
@@ -103,6 +107,8 @@ def main():
             depth = (255*tensor2array(depth, max_value=10, colormap='rainbow')).astype(np.uint8)
             imsave(output_dir/'{}_depth{}'.format(file.namebase,file.ext), depth)
     
+    if not args.quantize_weights:
+        return
     with open(output_dir/'dispnet_fix_info.txt', 'w') as f:
         count = 0
         for key, value in fix_info.items():

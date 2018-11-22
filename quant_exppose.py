@@ -25,6 +25,7 @@ parser.add_argument("--sequences", default=['09'], type=str, nargs='*', help="se
 parser.add_argument("--output-dir", default='output', type=str, help="Output directory for saving predictions in a big 3D numpy file")
 parser.add_argument("--img-exts", default=['png', 'jpg', 'bmp'], nargs='*', type=str, help="images extensions to glob")
 parser.add_argument("--rotation-mode", default='euler', choices=['euler', 'quat'], type=str)
+parser.add_argument("--original-input", action='store_true')
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -82,7 +83,10 @@ def main():
         ref_imgs = []
         for i, img in enumerate(imgs):
             img = torch.from_numpy(img).unsqueeze(0)
-            img = ((img/255 - 0.5)/0.5).to(device)
+            if args.original_input:
+                img = (img).to(device)
+            else:
+                img = ((img/255 - 0.5)/0.5).to(device)
             if i == len(imgs)//2:
                 tgt_img = img
             else:

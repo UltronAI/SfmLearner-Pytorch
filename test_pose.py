@@ -7,21 +7,22 @@ from path import Path
 import argparse
 from tqdm import tqdm
 
-from models import PoseExpNet
+from models import PoseExpNet, QuantPoseExpNet
 from inverse_warp import pose_vec2mat
 
 
 parser = argparse.ArgumentParser(description='Script for PoseNet testing with corresponding groundTruth from KITTI Odometry',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("pretrained_posenet", type=str, help="pretrained PoseNet path")
+parser.add_argument("--pretrained-posenet", default=None, type=str, help="pretrained PoseNet path")
 parser.add_argument("--img-height", default=128, type=int, help="Image height")
 parser.add_argument("--img-width", default=416, type=int, help="Image width")
 parser.add_argument("--no-resize", action='store_true', help="no resizing is done")
 parser.add_argument("--min-depth", default=1e-3)
 parser.add_argument("--max-depth", default=80)
+parser.add_argument("--use-quant-model", action='store_true')
 
 parser.add_argument("--dataset-dir", default='.', type=str, help="Dataset directory")
-parser.add_argument("--sequences", default=['09'], type=str, nargs='*', help="sequences to test")
+parser.add_argument("--sequences", default=['00'], type=str, nargs='*', help="sequences to test")
 parser.add_argument("--output-dir", default=None, type=str, help="Output directory for saving predictions in a big 3D numpy file")
 parser.add_argument("--img-exts", default=['png', 'jpg', 'bmp'], nargs='*', type=str, help="images extensions to glob")
 parser.add_argument("--rotation-mode", default='euler', choices=['euler', 'quat'], type=str)
@@ -35,8 +36,12 @@ def main():
     from kitti_eval.pose_evaluation_utils import test_framework_KITTI as test_framework
 
     weights = torch.load(args.pretrained_posenet)
-    seq_length = int(weights['state_dict']['conv1.0.weight'].size(1)/3)
-    pose_net = PoseExpNet(nb_ref_imgs=seq_length - 1, output_exp=False).to(device)
+    conv_1_weight_name = 'conv1.0.weight' if not args.use_quant_model else 'conv1_1.weight'
+    seq_length = int(weights['state_dict'][conv_1_weight_name].size(1)/3)
+    if args.use_quant_model:
+        pose_net = QuantPoseExpNet(nb_ref_imgs=seq_length - 1, output_exp=False).to(device)
+    else:
+        pose_net = PoseExpNet(nb_ref_imgs=seq_length - 1, output_exp=False).to(device)
     pose_net.load_state_dict(weights['state_dict'], strict=False)
 
     dataset_dir = Path(args.dataset_dir)
@@ -71,7 +76,6 @@ def main():
 
         poses = poses.cpu()[0]
         poses = torch.cat([poses[:len(imgs)//2], torch.zeros(1,6).float(), poses[len(imgs)//2:]])
-
         inv_transform_matrices = pose_vec2mat(poses, rotation_mode=args.rotation_mode).numpy().astype(np.float64)
 
         rot_matrices = np.linalg.inv(inv_transform_matrices[:,:,:3])
