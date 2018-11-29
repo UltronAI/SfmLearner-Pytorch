@@ -50,17 +50,19 @@ def main():
         output_dir.makedirs_p()
 
     count = 0
-    poses_array = np.array((4541, 3, 3, 4))
+    poses_array = np.zeros((4541, 3, 3, 4), dtype=np.float64)
     for img_list, pose_list, sample_list in zip(img_files, poses, sample_indices):
         for snippet_indices in sample_list:
             imgs = [imread(img_list[i]).astype(np.float32) for i in snippet_indices]
             poses_ = np.stack(pose_list[i] for i in snippet_indices)
             first_pose = poses_[0]
             poses_[:,:,-1] -= first_pose[:,-1]
-            compensated_poses = np.linalg.inv(first_pose[:,:3]) @ poses
-            assert compensated_poses.shape == (3, 3, 4)
-            poses_array[count] = compensated_poses
+            compensated_poses = np.linalg.inv(first_pose[:,:3]) @ poses_
+            assert compensated_poses.shape == (3, 3, 4), print(compensated_poses.shape)
+            poses_array[count] = np.array(compensated_poses)
             count += 1
 
     np.save(output_dir/'gt.npy', poses_array)
-            
+
+if __name__ == '__main__':
+    main()            
