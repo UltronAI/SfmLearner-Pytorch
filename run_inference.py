@@ -7,7 +7,7 @@ from path import Path
 import argparse
 from tqdm import tqdm
 
-from models import DispNetS
+from models import DispNetS, QuantDispNetS
 from utils import tensor2array
 
 parser = argparse.ArgumentParser(description='Inference script for DispNet learned with \
@@ -19,6 +19,7 @@ parser.add_argument("--pretrained", required=True, type=str, help="pretrained Di
 parser.add_argument("--img-height", default=128, type=int, help="Image height")
 parser.add_argument("--img-width", default=416, type=int, help="Image width")
 parser.add_argument("--no-resize", action='store_true', help="no resizing is done")
+parser.add_argument("--use-quant-model", action='store_true')
 
 parser.add_argument("--dataset-list", default=None, type=str, help="Dataset list file")
 parser.add_argument("--dataset-dir", default='.', type=str, help="Dataset directory")
@@ -36,7 +37,10 @@ def main():
         print('You must at least output one value !')
         return
 
-    disp_net = DispNetS().to(device)
+    if args.use_quant_model:
+        disp_net = QuantDispNetS().to(device)
+    else:
+        disp_net = DispNetS().to(device)
     weights = torch.load(args.pretrained)
     disp_net.load_state_dict(weights['state_dict'])
     disp_net.eval()
