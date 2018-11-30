@@ -50,7 +50,8 @@ def main():
         output_dir.makedirs_p()
 
     count = 0
-    poses_array = np.zeros((4541, 3, 3, 4), dtype=np.float64)
+    n_sample = sum(len(imgs) for imgs in img_files)
+    poses_array = np.zeros((n_sample, 3, 3, 4), dtype=np.float64)
     for img_list, pose_list, sample_list in zip(img_files, poses, sample_indices):
         for snippet_indices in sample_list:
             imgs = [imread(img_list[i]).astype(np.float32) for i in snippet_indices]
