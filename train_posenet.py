@@ -60,6 +60,7 @@ parser.add_argument('--seed', default=0, type=int, help='seed for random functio
 parser.add_argument('--print-freq', default=10, type=int, metavar='N', help='print frequency')
 parser.add_argument('--log-output', action='store_true', help='will log dispnet outputs and warped imgs at validation step')
 parser.add_argument('-g', '--gpu-id', type=int, metavar='N', default=-1)
+parser.add_argument('--use-scale-factor', action='store_true', help="use global scale factor")
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -73,6 +74,8 @@ def main():
     print('=> will save everything to {}'.format(args.save_path))
     args.save_path.makedirs_p()
     torch.manual_seed(args.seed)
+
+    training_writer = SummaryWriter(args.save_path)
 
     # Data loading code
     normalize = custom_transforms.Normalize(mean=[0.5, 0.5, 0.5],
@@ -142,6 +145,8 @@ def main():
     if args.checkpoint:
         logger.reset_valid_bar()
         errors, error_names = validate(args, val_loader, pose_net)
+        for error, name in zip(errors, error_names):
+            training_writer.add_scalar(name, error, 0)
         error_string = ', '.join('{} : {:.3f}'.format(name, error) for name, error in zip(error_names, errors))
         logger.valid_writer.write(' * Avg {}'.format(error_string))
 
@@ -150,7 +155,7 @@ def main():
 
         # train for one epoch
         logger.reset_train_bar()
-        train_loss = train(args, train_loader, pose_net, optimizer, args.epoch_size, logger)
+        train_loss = train(args, train_loader, pose_net, optimizer, args.epoch_size, logger, train_writer)
         logger.train_writer.write(' * Avg Loss : {:.3f}'.format(train_loss))
 
         # evaluate on validation set
@@ -158,6 +163,9 @@ def main():
         errors, error_names = validate(args, train_loader, pose_net, optimizer, args.epoch_size)
         error_string = ', '.join('{} : {:.4f}'.format(name, error) for name, error in zip(error_names, errors))
         logger.valid_writer.write(' * Avg {}'.format(error_string))
+
+        for error, name in zip(errors, error_names):
+            training_writer.add_scalar(name, error, epoch)
 
         ate_error = errors[0]
         if best_error < 0:
@@ -197,6 +205,7 @@ def save_path_formatter(args, parser):
     keys_with_prefix['sequence_length'] = 'seq'
     keys_with_prefix['rotation_mode'] = 'rot_'
     keys_with_prefix['batch_size'] = 'b'
+    keys_with_prefix['use_scale_factor'] = 'use_scale_factor_'
     keys_with_prefix['lr'] = 'lr'
 
     for key, prefix in keys_with_prefix.items():
@@ -208,7 +217,7 @@ def save_path_formatter(args, parser):
     return save_path/timestamp
 
 
-def train(args, train_loader, pose_net, optimizer, epoch_size, logger):
+def train(args, train_loader, pose_net, optimizer, epoch_size, logger, train_writer):
     global n_iter, device
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -238,7 +247,10 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger):
         # compute output
         _, poses = pose_net(tgt_img, ref_imgs)
         groundtruth = groundtruth.to(device)
-        loss = compute_loss(groundtruth, poses)
+        loss = compute_loss(groundtruth, poses, use_scale_factor)
+
+        if i > 0 and n_iter % args.print_freq == 0:
+            train_writer.add_scalar('Smooth L1 Loss', loss.item(), n_iter)
 
         # record loss and EPE
         losses.update(loss.item(), args.batch_size)
@@ -263,7 +275,7 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger):
     return losses.avg[0]
 
 
-def compute_loss(gt, pred):
+def compute_loss(gt, pred, use_scale_factor=False):
     global device
     poses = pred.cpu()[0]
     poses = torch.cat([poses[:len(imgs)//2], torch.zeros(1,6).float(), poses[len(imgs)//2:]])
@@ -279,7 +291,13 @@ def compute_loss(gt, pred):
     final_poses[:,:,-1:] += first_inv_transform[:,-1:]
     final_poses = torch.from_numpy(final_poses).to(device)
 
-    loss = F.smooth_l1_loss(final_poses, gt)
+    if use_scale_factor:
+        np_poses = final_poses.cpu().numpy()
+        np_gt = gt.cpu().numpy()
+        scale_factor = np.sum(np_gt[:,:,-1] * np_poses[:,:,-1]) / np.sum(np_poses[:,:,-1] ** 2)
+        loss = F.smooth_l1_loss(final_poses * scale_factor, gt)
+    else:
+        loss = F.smooth_l1_loss(final_poses, gt)
 
     return loss
 
