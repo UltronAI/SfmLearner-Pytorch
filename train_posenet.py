@@ -1,4 +1,4 @@
-import argparse, time, csv, os
+import argparse, time, csv, os, datetime
 
 import torch
 from torch.autograd import Variable
@@ -19,10 +19,10 @@ from models import QuantPoseExpNet
 from inverse_warp import pose_vec2mat
 from logger import TermLogger, AverageMeter
 from tensorboardX import SummaryWriter
-
+from collections import OrderedDict
 from datasets.pose_estimation import pose_framework_KITTI
 
-parser = argparse.ArgumentParser(description="Script for supervised-training of PoseNet with corresponding groundtruth from KITTI Odometry."
+parser = argparse.ArgumentParser(description="Script for supervised-training of PoseNet with corresponding groundtruth from KITTI Odometry.",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--checkpoint', default=None, type=str, help="path to pretrained pose net model")
 parser.add_argument("--img-height", default=128, type=int, help="Image height")
@@ -32,7 +32,7 @@ parser.add_argument("--min-depth", default=1e-3)
 parser.add_argument("--max-depth", default=80)
 
 parser.add_argument("--dataset-dir", default='.', type=str, help="Dataset directory")
-parser.add_argument("--train-sequences", default=['01', '02', '03', '05', '06', '07', '08', '09', '10'], 
+parser.add_argument("--train-sequences", default=['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'], 
                     type=str, nargs='*', help="sequences to train")
 parser.add_argument("--test-sequences", default=['00'], type=str, nargs='*', help="sequences to test")
 parser.add_argument("--output-dir", default=None, type=str, help="Output directory for saving predictions in a big 3D numpy file")
@@ -88,14 +88,16 @@ def main():
     ])
     valid_transform = custom_transforms.Compose([custom_transforms.ArrayToTensor(), normalize])
 
-    print("=> fetching sequences in '{}'".format(args.data))
+    print("=> fetching sequences in '{}'".format(args.dataset_dir))
     dataset_dir = Path(args.dataset_dir)
+    print("=> preparing train set") 
     train_set = pose_framework_KITTI(
         dataset_dir, args.train_sequences, 
         sequence_length=args.sequence_length,
         transform=train_transform,
         seed=args.seed
     )
+    print("=> preparing val set")
     val_set = pose_framework_KITTI(
         dataset_dir, args.test_sequences, 
         sequence_length=args.sequence_length,
@@ -196,7 +198,7 @@ def save_path_formatter(args, parser):
     def is_default(key, value):
         return value == parser.get_default(key)
     args_dict = vars(args)
-    data_folder_name = str(Path(args_dict['data']).normpath().name)
+    data_folder_name = str(Path(args_dict['dataset_dir']).normpath().name)
     folder_string = [data_folder_name]
     if not is_default('epochs', args_dict['epochs']):
         folder_string.append('{}epochs'.format(args_dict['epochs']))
@@ -382,3 +384,6 @@ def save_checkpoint(save_path, exp_pose_state, is_best, filename='checkpoint.pth
     if is_best:
         for prefix in file_prefixes:
             shutil.copyfile(save_path/'{}_{}'.format(prefix,filename), save_path/'{}_model_best.pth.tar'.format(prefix))
+
+if __name__ == '__main__':
+    main()

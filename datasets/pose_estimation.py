@@ -14,6 +14,7 @@ class pose_framework_KITTI(data.Dataset):
         self.root, self.transform = root, transform
         self.img_files, self.poses, self.sample_indices = read_scene_data(self.root, sequence_set, sequence_length, step)
         self.sequence_num = len(self.poses)
+        self.generator()
 
     def generator(self):
         sequence_set = []
@@ -25,7 +26,7 @@ class pose_framework_KITTI(data.Dataset):
                 poses[:,:,-1] -= first_pose[:,-1]
                 compensated_poses = np.linalg.inv(first_pose[:,:3]) @ poses
 
-                sample = {'imgs': imgs, 'path': img_list[0], 'poses': compensated_poses}
+                sample = {'imgs': imgs, 'poses': compensated_poses}
                 sequence_set.append(sample)
 
         random.shuffle(sequence_set)
@@ -33,10 +34,10 @@ class pose_framework_KITTI(data.Dataset):
 
     def __getitem__(self, index):
         sample = self.samples[index]
-        imgs, path, poses = sample['imgs'], sample['path'], sample['poses']
+        imgs, poses = sample['imgs'], sample['poses']
         if self.transform is not None:
             imgs = self.transform(imgs)
-        return imgs, path, poses
+        return imgs, poses
 
     def __len__(self):
         return len(self.samples)
@@ -51,12 +52,12 @@ def read_scene_data(data_root, sequence_set, seq_length=3, step=1):
     shift_range = np.array([step*i for i in range(-demi_length, demi_length + 1)]).reshape(1, -1)
 
     sequences = set()
-    for seq in sequence_set:
+    for seq in tqdm(sequence_set, leave=False):
         corresponding_dirs = set((data_root/'sequences').dirs(seq))
         sequences = sequences | corresponding_dirs
 
-    print('getting test metadata for theses sequences : {}'.format(sequences))
-    for sequence in tqdm(sequences):
+    print('getting test metadata for these sequences : {}'.format(sequences))
+    for sequence in sequences:
         poses = np.genfromtxt(data_root/'poses'/'{}.txt'.format(sequence.name)).astype(np.float64).reshape(-1, 3, 4)
         imgs = sorted((sequence/'image_2').files('*.png'))
         # construct 5-snippet sequences
