@@ -20,7 +20,7 @@ class pose_framework_KITTI(data.Dataset):
         sequence_set = []
         for img_list, pose_list, sample_list in zip(self.img_files, self.poses, self.sample_indices):
             for snippet_indices in tqdm(sample_list, leave=False, dynamic_ncols=True):
-                imgs = [imread(img_list[i]).astype(np.float32) for i in snippet_indices]
+                imgs = [img_list[i] for i in snippet_indices]
                 poses = np.stack(pose_list[i] for i in snippet_indices)
                 first_pose = poses[0]
                 poses[:,:,-1] -= first_pose[:,-1]
@@ -34,10 +34,10 @@ class pose_framework_KITTI(data.Dataset):
 
     def __getitem__(self, index):
         sample = self.samples[index]
-        imgs, poses = sample['imgs'], sample['poses']
+        imgs = [imread(img).astype(np.float32) for img in sample['imgs']]
         if self.transform is not None:
             imgs = self.transform(imgs)
-        return imgs, poses
+        return imgs, sample['poses']
 
     def __len__(self):
         return len(self.samples)
