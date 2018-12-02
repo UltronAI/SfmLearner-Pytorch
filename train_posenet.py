@@ -110,7 +110,7 @@ def main():
         train_set, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(
-        val_set, batch_size=args.batch_size, shuffle=False,
+        val_set, batch_size=1, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
     if args.epoch_size == 0:
@@ -281,27 +281,30 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger, train_wri
 def compute_loss(gt, pred, args, use_scale_factor=False):
     global device
     batch_size = pred.size(0)
-    poses = pred.cpu()
-    poses = torch.cat([poses[:, :args.sequence_length//2], torch.zeros(batch_size, 1,6).float(), poses[:, args.sequence_length//2:]])
-    inv_transform_matrices = pose_vec2mat(poses, rotation_mode=args.rotation_mode).detach().numpy().astype(np.float64)
+    predictions_array = torch.new_empty((batch_size, args.sequence_length, 3, 4), dtype=torch.float).to(device)
+    for i in range(batch_size):
+        poses = pred[i]
+        poses = torch.cat([poses[:args.sequence_length//2], torch.zeros(batch_size, 1,6).float(), poses[args.sequence_length//2:]])
+        inv_transform_matrices = pose_vec2mat(poses, rotation_mode=args.rotation_mode).detach().numpy().astype(np.float64)
 
-    rot_matrices = np.linalg.inv(inv_transform_matrices[:,:,:3])
-    tr_vectors = -rot_matrices @ inv_transform_matrices[:,:,-1:]
+        rot_matrices = np.linalg.inv(inv_transform_matrices[:, :, :3])
+        tr_vectors = -rot_matrices @ inv_transform_matrices[:, :, -1:]
 
-    transform_matrices = np.concatenate([rot_matrices, tr_vectors], axis=-1)
+        transform_matrices = np.concatenate([rot_matrices, tr_vectors], axis=-1)
 
-    first_inv_transform = inv_transform_matrices[0]
-    final_poses = first_inv_transform[:,:3] @ transform_matrices
-    final_poses[:,:,-1:] += first_inv_transform[:,-1:]
-    final_poses = torch.from_numpy(final_poses).to(device)
+        first_inv_transform = inv_transform_matrices[0]
+        final_poses = first_inv_transform[:,:3] @ transform_matrices
+        final_poses[:,:,-1:] += first_inv_transform[:,-1:]
+        final_poses = torch.from_numpy(final_poses).to(device)
+        predictions_array[i] = final_poses
 
     if use_scale_factor:
-        np_poses = final_poses.cpu().numpy()
+        np_poses = predictions_array.cpu().numpy()
         np_gt = gt.cpu().numpy()
-        scale_factor = np.sum(np_gt[:,:,-1] * np_poses[:,:,-1]) / np.sum(np_poses[:,:,-1] ** 2)
-        loss = F.smooth_l1_loss(final_poses * scale_factor, gt)
+        scale_factor = np.sum(np_gt[:, :, :, -1] * np_poses[:, :, :, -1]) / np.sum(np_poses[:, :, :, -1] ** 2)
+        loss = F.smooth_l1_loss(predictions_array * scale_factor, gt)
     else:
-        loss = F.smooth_l1_loss(final_poses, gt)
+        loss = F.smooth_l1_loss(predictions_array, gt)
 
     return loss
 
