@@ -7,7 +7,7 @@ import torch.optim
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data
-import custom_transforms
+import pose_transforms
 
 from scipy.misc import imresize
 import numpy as np
@@ -229,7 +229,7 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger, train_wri
     end = time.time()
     logger.train_bar.update(0)
 
-    for i, (imgs, path, groundtruth) in enumerate(train_loader):
+    for i, (imgs, groundtruth) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 

@@ -12,7 +12,7 @@ class pose_framework_KITTI(data.Dataset):
         np.random.seed(seed)
         random.seed(seed)
         self.root, self.transform = root, transform
-        self.img_files, self.poses, self.sample_indices = read_scene_data(self.root, sequence_set, sequence_length, step)
+        self.img_files, self.poses, self.sample_indices, self.intrinsics = read_scene_data(self.root, sequence_set, sequence_length, step)
         self.sequence_num = len(self.poses)
         self.generator()
 
@@ -60,6 +60,7 @@ def read_scene_data(data_root, sequence_set, seq_length=3, step=1):
     for sequence in sequences:
         poses = np.genfromtxt(data_root/'poses'/'{}.txt'.format(sequence.name)).astype(np.float64).reshape(-1, 3, 4)
         imgs = sorted((sequence/'image_2').files('*.png'))
+        intrinsics = np.genfromtxt(scene/'cam.txt').astype(np.float32).reshape((3, 3))
         # construct 5-snippet sequences
         tgt_indices = np.arange(demi_length, len(imgs) - demi_length).reshape(-1, 1)
         snippet_indices = shift_range + tgt_indices
