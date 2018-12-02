@@ -78,15 +78,15 @@ def main():
     training_writer = SummaryWriter(args.save_path)
 
     # Data loading code
-    normalize = custom_transforms.Normalize(mean=[0.5, 0.5, 0.5],
+    normalize = pose_transforms.Normalize(mean=[0.5, 0.5, 0.5],
                                             std=[0.5, 0.5, 0.5])
-    train_transform = custom_transforms.Compose([
-        custom_transforms.RandomHorizontalFlip(),
-        custom_transforms.RandomScaleCrop(),
-        custom_transforms.ArrayToTensor(),
+    train_transform = pose_transforms.Compose([
+        pose_transforms.RandomHorizontalFlip(),
+        pose_transforms.RandomScaleCrop(),
+        pose_transforms.ArrayToTensor(),
         normalize
     ])
-    valid_transform = custom_transforms.Compose([custom_transforms.ArrayToTensor(), normalize])
+    valid_transform = pose_transforms.Compose([pose_transforms.ArrayToTensor(), normalize])
 
     print("=> fetching sequences in '{}'".format(args.dataset_dir))
     dataset_dir = Path(args.dataset_dir)
@@ -118,7 +118,7 @@ def main():
 
     # create model
     print("=> creating model")
-    pose_net = QuantPoseExpNet(nb_ref_imgs=args.sequence_length-1, output_exp=False)
+    pose_net = QuantPoseExpNet(nb_ref_imgs=args.sequence_length-1, output_exp=False).to(device)
     if args.checkpoint is not None:
         print("=> using pre-trained weights for PoseNet")
         weights = torch.load(args.checkpoint)
@@ -233,23 +233,24 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger, train_wri
         # measure data loading time
         data_time.update(time.time() - end)
 
-        h, w, _ = imgs[0].shape
-        if (not args.no_resize) and (h != args.img_height or w != args.img_width):
-            imgs = [imresize(img, (args.img_height, args.img_width)).astype(np.float32) for img in imgs]
-        imgs = [np.transpose(img, (2,0,1)) for img in imgs]
+        # h, w, _ = imgs[0].shape
+        # if (not args.no_resize) and (h != args.img_height or w != args.img_width):
+        #     imgs = [imresize(img, (args.img_height, args.img_width)).astype(np.float32) for img in imgs]
+        # imgs = [np.transpose(img, (2,0,1)) for img in imgs]
 
         ref_imgs = []
         for i, img in enumerate(imgs):
-            img = torch.from_numpy(img).unsqueeze(0).to(device)
+            # print(img.size())
+            # img = torch.from_numpy(img).unsqueeze(0).to(device)
             if i == len(imgs)//2:
-                tgt_img = img
+                tgt_img = img.to(device)
             else:
-                ref_imgs.append(img)
+                ref_imgs.append(img.to(device))
 
         # compute output
         _, poses = pose_net(tgt_img, ref_imgs)
         groundtruth = groundtruth.to(device)
-        loss = compute_loss(groundtruth, poses, use_scale_factor)
+        loss = compute_loss(groundtruth, poses, args, args.use_scale_factor)
 
         if i > 0 and n_iter % args.print_freq == 0:
             train_writer.add_scalar('Smooth L1 Loss', loss.item(), n_iter)
@@ -277,11 +278,12 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger, train_wri
     return losses.avg[0]
 
 
-def compute_loss(gt, pred, use_scale_factor=False):
+def compute_loss(gt, pred, args, use_scale_factor=False):
     global device
-    poses = pred.cpu()[0]
-    poses = torch.cat([poses[:len(imgs)//2], torch.zeros(1,6).float(), poses[len(imgs)//2:]])
-    inv_transform_matrices = pose_vec2mat(poses, rotation_mode=args.rotation_mode).numpy().astype(np.float64)
+    batch_size = pred.size(0)
+    poses = pred.cpu()
+    poses = torch.cat([poses[:, :args.sequence_length//2], torch.zeros(batch_size, 1,6).float(), poses[:, args.sequence_length//2:]])
+    inv_transform_matrices = pose_vec2mat(poses, rotation_mode=args.rotation_mode).detach().numpy().astype(np.float64)
 
     rot_matrices = np.linalg.inv(inv_transform_matrices[:,:,:3])
     tr_vectors = -rot_matrices @ inv_transform_matrices[:,:,-1:]
@@ -314,18 +316,18 @@ def validate(args, val_loader, pose_net, logger):
     end = time.time()
     logger.valid_bar.update(0)
     for i, (imgs, path, groundtruth) in enmuerate(val_loader):
-        h, w, _ = imgs[0].shape
-        if (not args.no_resize) and (h != args.img_height or w != args.img_width):
-            imgs = [imresize(img, (args.img_height, args.img_width)).astype(np.float32) for img in imgs]
-        imgs = [np.transpose(img, (2,0,1)) for img in imgs]
+        # h, w, _ = imgs[0].shape
+        # if (not args.no_resize) and (h != args.img_height or w != args.img_width):
+        #     imgs = [imresize(img, (args.img_height, args.img_width)).astype(np.float32) for img in imgs]
+        # imgs = [np.transpose(img, (2,0,1)) for img in imgs]
 
         ref_imgs = []
         for i, img in enumerate(imgs):
-            img = torch.from_numpy(img).unsqueeze(0).to(device)
+            # img = torch.from_numpy(img).unsqueeze(0).to(device)
             if i == len(imgs)//2:
-                tgt_img = img
+                tgt_img = img.to(device)
             else:
-                ref_imgs.append(img)
+                ref_imgs.append(img.to(device))
 
         # compute output
         _, poses = pose_net(tgt_img, ref_imgs)

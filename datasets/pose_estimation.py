@@ -3,17 +3,18 @@
 import numpy as np
 import torch.utils.data as data
 from path import Path
-from scipy.misc import imread
+from scipy.misc import imresize, imread
 from tqdm import tqdm
 import random
 
 class pose_framework_KITTI(data.Dataset):
-    def __init__(self, root, sequence_set, sequence_length=3, step=1, transform=None, seed=None):
+    def __init__(self, root, sequence_set, sequence_length=3, step=1, transform=None, seed=None, img_height=128, img_width=416):
         np.random.seed(seed)
         random.seed(seed)
         self.root, self.transform = root, transform
-        self.img_files, self.poses, self.sample_indices, self.intrinsics = read_scene_data(self.root, sequence_set, sequence_length, step)
+        self.img_files, self.poses, self.sample_indices = read_scene_data(self.root, sequence_set, sequence_length, step)
         self.sequence_num = len(self.poses)
+        self.height, self.width = img_height, img_width
         self.generator()
 
     def generator(self):
@@ -35,8 +36,11 @@ class pose_framework_KITTI(data.Dataset):
     def __getitem__(self, index):
         sample = self.samples[index]
         imgs = [imread(img).astype(np.float32) for img in sample['imgs']]
+        imgs = [imresize(img, (self.height, self.width)).astype(np.float32) for img in imgs]
         if self.transform is not None:
             imgs = self.transform(imgs)
+        # for img in imgs:
+        #     print(img.shape)
         return imgs, sample['poses']
 
     def __len__(self):
@@ -60,7 +64,7 @@ def read_scene_data(data_root, sequence_set, seq_length=3, step=1):
     for sequence in sequences:
         poses = np.genfromtxt(data_root/'poses'/'{}.txt'.format(sequence.name)).astype(np.float64).reshape(-1, 3, 4)
         imgs = sorted((sequence/'image_2').files('*.png'))
-        intrinsics = np.genfromtxt(scene/'cam.txt').astype(np.float32).reshape((3, 3))
+        # intrinsics = np.genfromtxt(scene/'cam.txt').astype(np.float32).reshape((3, 3))
         # construct 5-snippet sequences
         tgt_indices = np.arange(demi_length, len(imgs) - demi_length).reshape(-1, 1)
         snippet_indices = shift_range + tgt_indices
