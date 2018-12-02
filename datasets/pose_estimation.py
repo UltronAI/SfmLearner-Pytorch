@@ -20,7 +20,7 @@ class pose_framework_KITTI(data.Dataset):
     def generator(self):
         sequence_set = []
         for img_list, pose_list, sample_list in zip(self.img_files, self.poses, self.sample_indices):
-            for snippet_indices in tqdm(sample_list, leave=False, dynamic_ncols=True):
+            for snippet_indices in sample_list:
                 imgs = [img_list[i] for i in snippet_indices]
                 poses = np.stack(pose_list[i] for i in snippet_indices)
                 first_pose = poses[0]
@@ -62,7 +62,7 @@ def read_scene_data(data_root, sequence_set, seq_length=3, step=1):
 
     print('getting test metadata for these sequences : {}'.format(sequences))
     for sequence in sequences:
-        poses = np.genfromtxt(data_root/'poses'/'{}.txt'.format(sequence.name)).astype(np.float64).reshape(-1, 3, 4)
+        poses = np.genfromtxt(data_root/'poses'/'{}.txt'.format(sequence.name)).astype(np.float32).reshape(-1, 3, 4)
         imgs = sorted((sequence/'image_2').files('*.png'))
         # intrinsics = np.genfromtxt(scene/'cam.txt').astype(np.float32).reshape((3, 3))
         # construct 5-snippet sequences

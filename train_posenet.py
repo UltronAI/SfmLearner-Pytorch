@@ -63,7 +63,8 @@ parser.add_argument('-g', '--gpu-id', type=int, metavar='N', default=-1)
 parser.add_argument('--use-scale-factor', action='store_true', help="use global scale factor")
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
+best_error = -1
+n_iter = 0
 
 def main():
     global best_error, n_iter, device
@@ -281,10 +282,10 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger, train_wri
 def compute_loss(gt, pred, args, use_scale_factor=False):
     global device
     batch_size = pred.size(0)
-    predictions_array = torch.new_empty((batch_size, args.sequence_length, 3, 4), dtype=torch.float).to(device)
+    predictions_array = torch.empty((batch_size, args.sequence_length, 3, 4), dtype=torch.float, requires_grad=True).to(device)
     for i in range(batch_size):
-        poses = pred[i]
-        poses = torch.cat([poses[:args.sequence_length//2], torch.zeros(batch_size, 1,6).float(), poses[args.sequence_length//2:]])
+        poses = pred.cpu()[i]
+        poses = torch.cat([poses[:args.sequence_length//2], torch.zeros(1,6).float(), poses[args.sequence_length//2:]])
         inv_transform_matrices = pose_vec2mat(poses, rotation_mode=args.rotation_mode).detach().numpy().astype(np.float64)
 
         rot_matrices = np.linalg.inv(inv_transform_matrices[:, :, :3])
@@ -348,7 +349,7 @@ def validate(args, val_loader, pose_net, logger):
         final_poses = first_inv_transform[:,:3] @ transform_matrices
         final_poses[:,:,-1:] += first_inv_transform[:,-1:]
 
-        ATE, RE = compute_pose_error(groundtruth, final_poses)
+        ATE, RE = compute_pose_error(groundtruth.cpu().numpy()[0], final_poses)
         losses.update([ATE, RE])
 
         # measure elapsed time
