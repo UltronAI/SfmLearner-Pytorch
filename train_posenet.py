@@ -1,4 +1,4 @@
-import argparse, time, csv, os, datetime
+import argparse, time, csv, os, datetime, shutil
 
 import torch
 from torch.autograd import Variable
@@ -14,7 +14,7 @@ import numpy as np
 from path import Path
 import argparse
 
-from utils import tensor2array, save_checkpoint
+from utils import tensor2array
 from models import QuantPoseExpNet
 from inverse_warp import pose_vec2mat
 from logger import TermLogger, AverageMeter
@@ -147,7 +147,7 @@ def main():
 
     if args.checkpoint:
         logger.reset_valid_bar()
-        errors, error_names = validate(args, val_loader, pose_net)
+        errors, error_names = validate(args, val_loader, pose_net, logger)
         for error, name in zip(errors, error_names):
             training_writer.add_scalar(name, error, 0)
         error_string = ', '.join('{} : {:.3f}'.format(name, error) for name, error in zip(error_names, errors))
@@ -163,7 +163,7 @@ def main():
 
         # evaluate on validation set
         logger.reset_valid_bar()
-        errors, error_names = validate(args, train_loader, pose_net, optimizer, args.epoch_size)
+        errors, error_names = validate(args, val_loader, pose_net, logger)
         error_string = ', '.join('{} : {:.4f}'.format(name, error) for name, error in zip(error_names, errors))
         logger.valid_writer.write(' * Avg {}'.format(error_string))
 
@@ -182,14 +182,14 @@ def main():
             save_checkpoint(
                 args.save_path, {
                     'epoch': epoch + 1,
-                    'state_dict': pose_exp_net.module.state_dict()
+                    'state_dict': pose_net.module.state_dict()
                 },
                 is_best)
         else:
             save_checkpoint(
                 args.save_path, {
                     'epoch': epoch + 1,
-                    'state_dict': pose_exp_net.state_dict()
+                    'state_dict': pose_net.state_dict()
                 },
                 is_best)
 
@@ -233,11 +233,6 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger, train_wri
     for i, (imgs, groundtruth) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-
-        # h, w, _ = imgs[0].shape
-        # if (not args.no_resize) and (h != args.img_height or w != args.img_width):
-        #     imgs = [imresize(img, (args.img_height, args.img_width)).astype(np.float32) for img in imgs]
-        # imgs = [np.transpose(img, (2,0,1)) for img in imgs]
 
         ref_imgs = []
         for i, img in enumerate(imgs):
@@ -319,15 +314,9 @@ def validate(args, val_loader, pose_net, logger):
     pose_net.eval()
     end = time.time()
     logger.valid_bar.update(0)
-    for i, (imgs, path, groundtruth) in enmuerate(val_loader):
-        # h, w, _ = imgs[0].shape
-        # if (not args.no_resize) and (h != args.img_height or w != args.img_width):
-        #     imgs = [imresize(img, (args.img_height, args.img_width)).astype(np.float32) for img in imgs]
-        # imgs = [np.transpose(img, (2,0,1)) for img in imgs]
-
+    for i, (imgs, groundtruth) in enumerate(val_loader):
         ref_imgs = []
         for i, img in enumerate(imgs):
-            # img = torch.from_numpy(img).unsqueeze(0).to(device)
             if i == len(imgs)//2:
                 tgt_img = img.to(device)
             else:
@@ -335,21 +324,7 @@ def validate(args, val_loader, pose_net, logger):
 
         # compute output
         _, poses = pose_net(tgt_img, ref_imgs)
-
-        poses = poses.cpu()[0]
-        poses = torch.cat([poses[:len(imgs)//2], torch.zeros(1,6).float(), poses[len(imgs)//2:]])
-        inv_transform_matrices = pose_vec2mat(poses, rotation_mode=args.rotation_mode).numpy().astype(np.float64)
-
-        rot_matrices = np.linalg.inv(inv_transform_matrices[:,:,:3])
-        tr_vectors = -rot_matrices @ inv_transform_matrices[:,:,-1:]
-
-        transform_matrices = np.concatenate([rot_matrices, tr_vectors], axis=-1)
-
-        first_inv_transform = inv_transform_matrices[0]
-        final_poses = first_inv_transform[:,:3] @ transform_matrices
-        final_poses[:,:,-1:] += first_inv_transform[:,-1:]
-
-        ATE, RE = compute_pose_error(groundtruth.cpu().numpy()[0], final_poses)
+        ATE, RE = compute_pose_error(groundtruth, poses, args)
         losses.update([ATE, RE])
 
         # measure elapsed time
@@ -364,21 +339,42 @@ def validate(args, val_loader, pose_net, logger):
     return losses.avg, ['ATE', 'RE']
 
 
-def compute_pose_error(gt, pred):
-    RE = 0
-    snippet_length = gt.shape[0]
-    ATE = np.linalg.norm((gt[:,:,-1] - pred[:,:,-1]).reshape(-1))
-    for gt_pose, pred_pose in zip(gt, pred):
-        # Residual matrix to which we compute angle's sin and cos
-        R = gt_pose[:,:3] @ np.linalg.inv(pred_pose[:,:3])
-        s = np.linalg.norm([R[0,1]-R[1,0],
-                            R[1,2]-R[2,1],
-                            R[0,2]-R[2,0]])
-        c = np.trace(R) - 1
-        # Note: we actually compute double of cos and sin, but arctan2 is invariant to scale
-        RE += np.arctan2(s,c)
+def compute_pose_error(gt, pred, args):
+    batch_size = pred.size(0)
+    ATE_total = 0
+    RE_total = 0
+    for i in range(batch_size):
+        poses = pred.cpu()[i]
+        poses = torch.cat([poses[:args.sequence_length//2], torch.zeros(1,6).float(), poses[args.sequence_length//2:]])
+        inv_transform_matrices = pose_vec2mat(poses, rotation_mode=args.rotation_mode).detach().numpy().astype(np.float64)
 
-    return ATE/snippet_length, RE/snippet_length
+        rot_matrices = np.linalg.inv(inv_transform_matrices[:, :, :3])
+        tr_vectors = -rot_matrices @ inv_transform_matrices[:, :, -1:]
+
+        transform_matrices = np.concatenate([rot_matrices, tr_vectors], axis=-1)
+
+        first_inv_transform = inv_transform_matrices[0]
+        final_poses = first_inv_transform[:,:3] @ transform_matrices
+        final_poses[:,:,-1:] += first_inv_transform[:,-1:]
+
+        gt_ = gt.cpu()[i].detach().numpy().astype(np.float64)
+        RE = 0
+        snippet_length = gt.shape[0]
+        ATE = np.linalg.norm((gt_[:,:,-1] - pred[:,:,-1]).reshape(-1))
+        for gt_pose, pred_pose in zip(gt_, pred):
+            # Residual matrix to which we compute angle's sin and cos
+            R = gt_pose[:,:3] @ np.linalg.inv(pred_pose[:,:3])
+            s = np.linalg.norm([R[0,1]-R[1,0],
+                                R[1,2]-R[2,1],
+                                R[0,2]-R[2,0]])
+            c = np.trace(R) - 1
+            # Note: we actually compute double of cos and sin, but arctan2 is invariant to scale
+            RE += np.arctan2(s,c)
+
+        ATE_total += ATE/snippet_length
+        RE_total += RE/snippet_length
+
+    return ATE_total/batch_size, RE_total/batch_size
 
 
 def save_checkpoint(save_path, exp_pose_state, is_best, filename='checkpoint.pth.tar'):
