@@ -118,7 +118,7 @@ def main():
 
     # create model
     print("=> creating model")
-    pose_net = QuantPoseExpNet(nb_reg_imgs=args.sequence_length-1, output_exp=False)
+    pose_net = QuantPoseExpNet(nb_ref_imgs=args.sequence_length-1, output_exp=False)
     if args.checkpoint is not None:
         print("=> using pre-trained weights for PoseNet")
         weights = torch.load(args.checkpoint)
@@ -157,7 +157,7 @@ def main():
 
         # train for one epoch
         logger.reset_train_bar()
-        train_loss = train(args, train_loader, pose_net, optimizer, args.epoch_size, logger, train_writer)
+        train_loss = train(args, train_loader, pose_net, optimizer, args.epoch_size, logger, training_writer)
         logger.train_writer.write(' * Avg Loss : {:.3f}'.format(train_loss))
 
         # evaluate on validation set
@@ -229,7 +229,7 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger, train_wri
     end = time.time()
     logger.train_bar.update(0)
 
-    for i, (imgs, path, groundtruth) in enmuerate(train_loader):
+    for i, (imgs, path, groundtruth) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
