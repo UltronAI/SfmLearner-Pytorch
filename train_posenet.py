@@ -52,6 +52,9 @@ parser.add_argument('--lr', '--learning-rate', default=2e-4, type=float, metavar
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum for sgd, alpha parameter for adam')
 parser.add_argument('--beta', default=0.999, type=float, metavar='M', help='beta parameters for adam')
 parser.add_argument('--weight-decay', '--wd', default=0, type=float, metavar='W', help='weight decay')
+parser.add_argument('--optimizer', default='adam', type=str, choices=['adam', 'sgd', 'rmsprop'])
+parser.add_argument('--alpha', default=0.99, type=float, metavar='M')
+parser.add_argument('--eps', default=1e-8, type=float, metavar='M')
 
 parser.add_argument('--seed', default=0, type=int, help='seed for random functions, and network initialization')
 # parser.add_argument('--log-summary', default='progress_log_summary.csv', metavar='PATH', help='csv where to save per-epoch train and valid stats')
@@ -111,7 +114,7 @@ def main():
         train_set, batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(
-        val_set, batch_size=1, shuffle=False,
+        val_set, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
     if args.epoch_size == 0:
@@ -138,10 +141,20 @@ def main():
     optim_params = [
         {'params': pose_net.parameters(), 'lr': args.lr}
     ]
-    optimizer = torch.optim.Adam(optim_params,
+    if args.optimizer == 'adam':
+        optimizer = torch.optim.Adam(optim_params,
                                  betas=(args.momentum, args.beta),
                                  weight_decay=args.weight_decay)
-
+    elif args.optimizer == 'sgd':
+        optimizer = torch.optim.SGD(optim_params,
+                                 momentum=args.momentum,
+                                 weight_decay=args.weight_decay)
+    elif args.optimizer == 'rmsprop':
+        optimizer = torch.optim.RMSprop(optim_params,
+                                 alpha=args.alpha,
+                                 eps=args.eps,
+                                 weight_decay=args.weight_decay,
+                                 momentum=args.momentum)
     logger = TermLogger(n_epochs=args.epochs, train_size=min(len(train_loader), args.epoch_size), valid_size=len(val_loader))
     logger.epoch_bar.start()
 
@@ -210,6 +223,12 @@ def save_path_formatter(args, parser):
     keys_with_prefix['batch_size'] = 'b'
     keys_with_prefix['use_scale_factor'] = 'use_scale_factor_'
     keys_with_prefix['lr'] = 'lr'
+    keys_with_prefix['optimizer'] = 'optim_'
+    keys_with_prefix['alpha'] = 'alpha'
+    keys_with_prefix['weight_decay'] = 'wd'
+    keys_with_prefix['beta'] = 'beta'
+    keys_with_prefix['momentum'] = 'momentum'
+    keys_with_prefix['eps'] = 'eps'
 
     for key, prefix in keys_with_prefix.items():
         value = args_dict[key]
@@ -235,10 +254,10 @@ def train(args, train_loader, pose_net, optimizer, epoch_size, logger, train_wri
         data_time.update(time.time() - end)
 
         ref_imgs = []
-        for i, img in enumerate(imgs):
+        for j, img in enumerate(imgs):
             # print(img.size())
             # img = torch.from_numpy(img).unsqueeze(0).to(device)
-            if i == len(imgs)//2:
+            if j == len(imgs)//2:
                 tgt_img = img.to(device)
             else:
                 ref_imgs.append(img.to(device))
@@ -309,15 +328,15 @@ def compute_loss(gt, pred, args, use_scale_factor=False):
 def validate(args, val_loader, pose_net, logger):
     global device
     batch_time = AverageMeter()
-    losses = AverageMeter(i=3, precision=4)
+    losses = AverageMeter(i=2, precision=4)
 
     pose_net.eval()
     end = time.time()
     logger.valid_bar.update(0)
     for i, (imgs, groundtruth) in enumerate(val_loader):
         ref_imgs = []
-        for i, img in enumerate(imgs):
-            if i == len(imgs)//2:
+        for j, img in enumerate(imgs):
+            if j == len(imgs)//2:
                 tgt_img = img.to(device)
             else:
                 ref_imgs.append(img.to(device))
@@ -359,9 +378,9 @@ def compute_pose_error(gt, pred, args):
 
         gt_ = gt.cpu()[i].detach().numpy().astype(np.float64)
         RE = 0
-        snippet_length = gt.shape[0]
-        ATE = np.linalg.norm((gt_[:,:,-1] - pred[:,:,-1]).reshape(-1))
-        for gt_pose, pred_pose in zip(gt_, pred):
+        snippet_length = gt_.shape[0]
+        ATE = np.linalg.norm((gt_[:,:,-1] - final_poses[:,:,-1]).reshape(-1))
+        for gt_pose, pred_pose in zip(gt_, final_poses):
             # Residual matrix to which we compute angle's sin and cos
             R = gt_pose[:,:3] @ np.linalg.inv(pred_pose[:,:3])
             s = np.linalg.norm([R[0,1]-R[1,0],
